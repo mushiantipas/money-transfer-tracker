@@ -225,6 +225,31 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_status      ON whatsapp_messages(status)
 CREATE INDEX IF NOT EXISTS idx_whatsapp_to_number   ON whatsapp_messages(to_number);
 
 -- ---------------------------------------------------------------------------
+-- Table: debts
+-- Tracks money owed by Makomu Exchange to customers
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS debts (
+    id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id     UUID          NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+    transaction_id  UUID          REFERENCES transactions(id) ON DELETE SET NULL,
+    amount          NUMERIC(20,2) NOT NULL,
+    currency        TEXT          NOT NULL DEFAULT 'TZS',
+    reason          TEXT,
+    due_date        DATE,
+    is_settled      BOOLEAN       NOT NULL DEFAULT FALSE,
+    settled_at      TIMESTAMPTZ,
+    reminder_count  INTEGER       NOT NULL DEFAULT 0,
+    last_reminded_at TIMESTAMPTZ,
+    notes           TEXT,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_debts_customer    ON debts(customer_id);
+CREATE INDEX IF NOT EXISTS idx_debts_is_settled  ON debts(is_settled);
+CREATE INDEX IF NOT EXISTS idx_debts_due_date    ON debts(due_date);
+
+-- ---------------------------------------------------------------------------
 -- Table: message_templates
 -- Pre-built WhatsApp message templates
 -- ---------------------------------------------------------------------------
@@ -258,7 +283,7 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY[
         'users', 'customers', 'agents', 'exchange_rates',
-        'transactions', 'payments', 'whatsapp_messages', 'message_templates'
+        'transactions', 'payments', 'whatsapp_messages', 'message_templates', 'debts'
     ]
     LOOP
         EXECUTE format(
