@@ -11,7 +11,7 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Welcome back, Admin!</h2>
-          <p className="text-sm text-gray-500">Here&apos;s what&apos;s happening today.</p>
+          <p className="text-sm text-gray-500">Here's what's happening today.</p>
         </div>
         <div className="flex gap-2">
           <Link to="/transactions" className="btn-primary flex items-center gap-2 text-sm">
