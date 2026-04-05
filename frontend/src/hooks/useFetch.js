@@ -1,28 +1,35 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-const useFetch = (fetchFn, params = null, deps = []) => {
+const useFetch = (fetchFn, params = null) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const paramsRef = useRef(params);
 
-  const fetch = useCallback(async () => {
+  const execute = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = params ? await fetchFn(params) : await fetchFn();
+      const response = paramsRef.current
+        ? await fetchFn(paramsRef.current)
+        : await fetchFn();
       setData(response.data);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
-  }, [fetchFn, JSON.stringify(params)]);  // eslint-disable-line
+  };
 
   useEffect(() => {
-    fetch();
-  }, [fetch, ...deps]);  // eslint-disable-line
+    paramsRef.current = params;
+  });
 
-  return { data, loading, error, refetch: fetch };
+  useEffect(() => {
+    execute();
+  }, [fetchFn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { data, loading, error, refetch: execute };
 };
 
 export default useFetch;
