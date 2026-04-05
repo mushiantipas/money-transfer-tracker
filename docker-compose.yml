@@ -1,0 +1,79 @@
+version: "3.9"
+
+# =============================================================================
+# Money Transfer Tracker – Local Development with Docker Compose
+#
+# Usage:
+#   docker-compose up -d          # start all services
+#   docker-compose down           # stop all services
+#   docker-compose logs -f        # tail logs
+#   docker-compose ps             # check status
+#
+# Services:
+#   postgres  – PostgreSQL 14 (mirrors Google Cloud SQL schema)
+#   backend   – Node.js API on port 3000
+# =============================================================================
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:14-alpine
+    container_name: makomu_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: makomu_exchange
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: localpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Automatically run migrations on first start
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d makomu_exchange"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Backend (Node.js API) ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: makomu_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://admin:localpassword@postgres:5432/makomu_exchange
+      DB_SSL: "false"
+      JWT_SECRET: local_dev_jwt_secret_change_in_production
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: "http://localhost:3001"
+      LOG_LEVEL: debug
+      # Fill in real Twilio credentials to test WhatsApp locally
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-whatsapp:+14155238886}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source for hot-reload (dev only)
+      - ./backend:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:
+    driver: local
