@@ -9,6 +9,22 @@
     "test": "jest --forceExit",
     "migrate": "node db/migrate.js",
     "seed": "node ../scripts/seed.js"
+  "description": "Backend API for the Money Transfer Tracker – manages TZS/USD → USDT → RMB transactions with WhatsApp notifications.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "jest --forceExit",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --forceExit",
+    "migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -28,4 +44,60 @@
   "engines": {
     "node": ">=18.0.0"
   }
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-validator": "^7.1.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pg": "^8.12.0",
+    "twilio": "^5.2.2",
+    "uuid": "^10.0.0",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.js",
+      "**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!node_modules/**",
+      "!coverage/**",
+      "!jest.config.js"
+    ]
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es2022": true,
+      "jest": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2022
+    },
+    "rules": {
+      "no-console": "off",
+      "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+    }
+  },
+  "keywords": [
+    "money-transfer",
+    "tanzania",
+    "china",
+    "rmb",
+    "tzs",
+    "exchange-rate",
+    "whatsapp",
+    "postgresql"
+  ],
+  "license": "MIT"
 }
