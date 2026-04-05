@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChatBubbleLeftIcon,
   BellIcon,
@@ -6,27 +6,61 @@ import {
   CheckCircleIcon,
   ArrowPathIcon,
   PaperAirplaneIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import MessageLog from './MessageLog';
 import api from '../../services/api';
+import { getStorageItem, setStorageItem, removeStorageItem } from '../../utils/storage';
+
+// Custom hook: persist form data to localStorage with debounced writes
+const usePersistedForm = (storageKey, initialValues) => {
+  const [form, setForm] = useState(() => getStorageItem(storageKey, initialValues));
+  const timerRef = useRef(null);
+
+  const hasUnsaved = useMemo(
+    () => JSON.stringify(form) !== JSON.stringify(initialValues),
+    [form, initialValues]
+  );
+
+  // Cancel any pending save when the component unmounts
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setForm(prev => {
+      const next = { ...prev, [name]: value };
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setStorageItem(storageKey, next), 500);
+      return next;
+    });
+  }, [storageKey]);
+
+  const clearForm = useCallback(() => {
+    clearTimeout(timerRef.current);
+    setForm(initialValues);
+    removeStorageItem(storageKey);
+  }, [storageKey, initialValues]);
+
+  return { form, handleChange, hasUnsaved, clearForm };
+};
 
 // ---------------------------------------------------------------------------
 // Notification trigger forms
 // ---------------------------------------------------------------------------
 
-const PaymentConfirmForm = ({ onSent }) => {
-  const [form, setForm] = useState({
-    customer_phone: '',
-    customer_name: '',
-    reference_number: '',
-    source_amount: '',
-    source_currency: 'TZS',
-    destination_amount: '',
-  });
-  const [sending, setSending] = useState(false);
+const PAYMENT_DEFAULTS = {
+  customer_phone: '',
+  customer_name: '',
+  reference_number: '',
+  source_amount: '',
+  source_currency: 'TZS',
+  destination_amount: '',
+};
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+const PaymentConfirmForm = ({ onSent }) => {
+  const { form, handleChange, hasUnsaved, clearForm } = usePersistedForm('wa_payment_form', PAYMENT_DEFAULTS);
+  const [sending, setSending] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,6 +68,7 @@ const PaymentConfirmForm = ({ onSent }) => {
     try {
       await api.post('/notifications/payment-confirmed', form);
       toast.success('Payment confirmation sent!');
+      clearForm();
       onSent && onSent();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send message.');
@@ -44,6 +79,12 @@ const PaymentConfirmForm = ({ onSent }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {hasUnsaved && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+          Unsaved changes — data will be restored if you refresh the page.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label">Customer Phone *</label>
@@ -73,28 +114,36 @@ const PaymentConfirmForm = ({ onSent }) => {
           <input name="destination_amount" type="number" value={form.destination_amount} onChange={handleChange} className="input" placeholder="5200" />
         </div>
       </div>
-      <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
-        <PaperAirplaneIcon className="w-4 h-4" />
-        {sending ? 'Sending...' : 'Send Payment Confirmation'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
+          <PaperAirplaneIcon className="w-4 h-4" />
+          {sending ? 'Sending...' : 'Send Payment Confirmation'}
+        </button>
+        {hasUnsaved && (
+          <button type="button" onClick={clearForm} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-600 transition-colors">
+            <XMarkIcon className="w-4 h-4" />
+            Clear Form
+          </button>
+        )}
+      </div>
     </form>
   );
 };
 
-const OrderCompleteForm = ({ onSent }) => {
-  const [form, setForm] = useState({
-    customer_phone: '',
-    customer_name: '',
-    reference_number: '',
-    source_amount: '',
-    source_currency: 'TZS',
-    destination_amount: '',
-    recipient_name: '',
-    payment_method: 'WeChat',
-  });
-  const [sending, setSending] = useState(false);
+const ORDER_DEFAULTS = {
+  customer_phone: '',
+  customer_name: '',
+  reference_number: '',
+  source_amount: '',
+  source_currency: 'TZS',
+  destination_amount: '',
+  recipient_name: '',
+  payment_method: 'WeChat',
+};
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+const OrderCompleteForm = ({ onSent }) => {
+  const { form, handleChange, hasUnsaved, clearForm } = usePersistedForm('wa_order_form', ORDER_DEFAULTS);
+  const [sending, setSending] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -102,6 +151,7 @@ const OrderCompleteForm = ({ onSent }) => {
     try {
       await api.post('/notifications/order-completed', form);
       toast.success('Order completion message sent!');
+      clearForm();
       onSent && onSent();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send message.');
@@ -112,6 +162,12 @@ const OrderCompleteForm = ({ onSent }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {hasUnsaved && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+          Unsaved changes — data will be restored if you refresh the page.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label">Customer Phone *</label>
@@ -153,24 +209,32 @@ const OrderCompleteForm = ({ onSent }) => {
           </select>
         </div>
       </div>
-      <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
-        <PaperAirplaneIcon className="w-4 h-4" />
-        {sending ? 'Sending...' : 'Send Completion Message'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
+          <PaperAirplaneIcon className="w-4 h-4" />
+          {sending ? 'Sending...' : 'Send Completion Message'}
+        </button>
+        {hasUnsaved && (
+          <button type="button" onClick={clearForm} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-600 transition-colors">
+            <XMarkIcon className="w-4 h-4" />
+            Clear Form
+          </button>
+        )}
+      </div>
     </form>
   );
 };
 
-const ExchangeRateForm = ({ onSent }) => {
-  const [form, setForm] = useState({
-    tzs_usd_rate: '',
-    usd_usdt_rate: '',
-    usdt_rmb_rate: '',
-    phone_numbers_raw: '',
-  });
-  const [sending, setSending] = useState(false);
+const EXCHANGE_DEFAULTS = {
+  tzs_usd_rate: '',
+  usd_usdt_rate: '',
+  usdt_rmb_rate: '',
+  phone_numbers_raw: '',
+};
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+const ExchangeRateForm = ({ onSent }) => {
+  const { form, handleChange, hasUnsaved, clearForm } = usePersistedForm('wa_exchange_form', EXCHANGE_DEFAULTS);
+  const [sending, setSending] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -186,6 +250,7 @@ const ExchangeRateForm = ({ onSent }) => {
         phone_numbers: phones,
       });
       toast.success('Exchange rate update broadcast!');
+      clearForm();
       onSent && onSent();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to broadcast rates.');
@@ -196,6 +261,12 @@ const ExchangeRateForm = ({ onSent }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {hasUnsaved && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+          Unsaved changes — data will be restored if you refresh the page.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className="label">TZS per 1 USD *</label>
@@ -214,25 +285,33 @@ const ExchangeRateForm = ({ onSent }) => {
         <label className="label">Phone Numbers (comma-separated, leave blank to send to all customers)</label>
         <input name="phone_numbers_raw" value={form.phone_numbers_raw} onChange={handleChange} className="input" placeholder="+255712345678, +255787654321" />
       </div>
-      <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
-        <PaperAirplaneIcon className="w-4 h-4" />
-        {sending ? 'Broadcasting...' : 'Broadcast Exchange Rates'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
+          <PaperAirplaneIcon className="w-4 h-4" />
+          {sending ? 'Broadcasting...' : 'Broadcast Exchange Rates'}
+        </button>
+        {hasUnsaved && (
+          <button type="button" onClick={clearForm} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-600 transition-colors">
+            <XMarkIcon className="w-4 h-4" />
+            Clear Form
+          </button>
+        )}
+      </div>
     </form>
   );
 };
 
-const DebtReminderForm = ({ onSent }) => {
-  const [form, setForm] = useState({
-    customer_phone: '',
-    customer_name: '',
-    debt_amount: '',
-    debt_currency: 'TZS',
-    due_date: '',
-  });
-  const [sending, setSending] = useState(false);
+const DEBT_DEFAULTS = {
+  customer_phone: '',
+  customer_name: '',
+  debt_amount: '',
+  debt_currency: 'TZS',
+  due_date: '',
+};
 
-  const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+const DebtReminderForm = ({ onSent }) => {
+  const { form, handleChange, hasUnsaved, clearForm } = usePersistedForm('wa_debt_form', DEBT_DEFAULTS);
+  const [sending, setSending] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -240,6 +319,7 @@ const DebtReminderForm = ({ onSent }) => {
     try {
       await api.post('/notifications/debt-reminder', form);
       toast.success('Debt reminder sent!');
+      clearForm();
       onSent && onSent();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send reminder.');
@@ -250,6 +330,12 @@ const DebtReminderForm = ({ onSent }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {hasUnsaved && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+          Unsaved changes — data will be restored if you refresh the page.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label">Customer Phone *</label>
@@ -276,10 +362,18 @@ const DebtReminderForm = ({ onSent }) => {
           <input name="due_date" type="date" value={form.due_date} onChange={handleChange} className="input" />
         </div>
       </div>
-      <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
-        <PaperAirplaneIcon className="w-4 h-4" />
-        {sending ? 'Sending...' : 'Send Debt Reminder'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={sending} className="btn-primary flex items-center gap-2 text-sm">
+          <PaperAirplaneIcon className="w-4 h-4" />
+          {sending ? 'Sending...' : 'Send Debt Reminder'}
+        </button>
+        {hasUnsaved && (
+          <button type="button" onClick={clearForm} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-600 transition-colors">
+            <XMarkIcon className="w-4 h-4" />
+            Clear Form
+          </button>
+        )}
+      </div>
     </form>
   );
 };
